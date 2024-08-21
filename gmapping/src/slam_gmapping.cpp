@@ -274,7 +274,7 @@ void SlamGMapping::startLiveSlam()
   ss_ = node_.advertiseService("dynamic_map", &SlamGMapping::mapCallback, this);
   scan_filter_sub_ = new message_filters::Subscriber<sensor_msgs::LaserScan>(node_, "scan", 5);
   scan_filter_ = new tf::MessageFilter<sensor_msgs::LaserScan>(*scan_filter_sub_, tf_, odom_frame_, 5);
-  scan_filter_->registerCallback(boost::bind(&SlamGMapping::laserCallback, this, _1));
+  scan_filter_->registerCallback([this](auto msg){ laserCallback(msg); });
 
   transform_thread_ = new boost::thread(boost::bind(&SlamGMapping::publishLoop, this, transform_publish_period_));
 }

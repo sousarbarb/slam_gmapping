@@ -28,7 +28,14 @@ SLAMGMappingROS1Online::SLAMGMappingROS1Online(
 {
 }
 
-SLAMGMappingROS1Online::~SLAMGMappingROS1Online() {}
+SLAMGMappingROS1Online::~SLAMGMappingROS1Online()
+{
+  if (transform_thread_)
+  {
+    transform_thread_->join();
+    delete transform_thread_;
+  }
+}
 
 void SLAMGMappingROS1Online::startLiveSlam()
 {

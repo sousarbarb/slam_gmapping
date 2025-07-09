@@ -28,9 +28,30 @@ add_executable(slam_gmapping_online
   src/slam_gmapping_ros1_online.cpp
   src/slam_gmapping_ros1_online_node.cpp
 )
-target_link_libraries(slam_gmapping_online ${Boost_LIBRARIES} ${catkin_LIBRARIES})
+target_compile_options(slam_gmapping_online PRIVATE "-std=c++17")
+target_link_libraries(slam_gmapping_online
+  ${Boost_LIBRARIES}
+  ${catkin_LIBRARIES}
+)
 if(catkin_EXPORTED_TARGETS)
   add_dependencies(slam_gmapping_online ${catkin_EXPORTED_TARGETS})
+endif()
+
+add_executable(slam_gmapping_offline
+  src/slam_gmapping_ros1_api.cpp
+  src/slam_gmapping_ros1_offline.cpp
+  src/slam_gmapping_ros1_offline_node.cpp
+)
+target_compile_options(slam_gmapping_offline PRIVATE "-std=c++17")
+target_link_libraries(slam_gmapping_offline
+  ${Boost_LIBRARIES}
+  ${catkin_LIBRARIES}
+)
+if(catkin_EXPORTED_TARGETS)
+  add_dependencies(slam_gmapping_offline
+    ${catkin_EXPORTED_TARGETS}
+    Boost::program_options
+  )
 endif()
 
 add_executable(slam_gmapping src/slam_gmapping.cpp src/main.cpp)
@@ -54,6 +75,7 @@ install(
     slam_gmapping_nodelet
     slam_gmapping_replay
     slam_gmapping_online
+    slam_gmapping_offline
   ARCHIVE DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
   LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
   RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}

@@ -1,6 +1,8 @@
 .cproject
 .project
 .pydevproject
+.vs/
+.vscode/
 cmake_install.cmake
 build/
 bin/

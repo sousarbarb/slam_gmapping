@@ -1,6 +1,6 @@
 # [slam_gmapping](https://github.com/ros-perception/slam_gmapping/)
 
-**Modified by Ricaardo B. Sousa**
+**Modified by Ricardo B. Sousa**
 
 This fork only adds an offline node to process multiple ROS bag files, generate
 the 2D occupancy grid map through ROS API, and save the robot pose data into TUM

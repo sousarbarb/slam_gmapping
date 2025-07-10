@@ -22,12 +22,11 @@ class SLAMGMappingROS1Offline : public SLAMGMappingROS1API
   struct ParamOffline
   {
     std::vector<std::string> bags;  //!< set of ROS bag files to process
-    std::string odom_topic;         //!< odom topic name for odometry data
     std::string scan_topic;         //!< scan topic name for 2D laser data
-    bool has_duration;     //!< duration from the start time set in options
-    double time_start;     //!< start time (s) into the bag files
-    double time_duration;  //!< duration (s) to only process from the bags
-    bool enable_log;       //!< enable log of robot data (odom, pose) into TUM
+    bool has_duration;         //!< duration from the start time set in options
+    double time_start;         //!< start time (s) into the bag files
+    double time_duration;      //!< duration (s) to only process from the bags
+    bool enable_log;           //!< enable log of robot data (pose) into TUM
     std::string log_filename;  //!< log filename
   };  // struct SLAMGMappingROS1Offline::ParamOffline
 
@@ -42,8 +41,7 @@ class SLAMGMappingROS1Offline : public SLAMGMappingROS1API
 
   virtual void pubEntropy() final {}
   virtual void pubMap() final;
-  virtual void pubOdom(const std_msgs::Header&) final;
-  virtual void pubPose(const std_msgs::Header&) final;
+  virtual void pubPose(const std_msgs::Header& header) final;
   virtual void pubTransform() final {}
 
  private:
@@ -63,6 +61,5 @@ class SLAMGMappingROS1Offline : public SLAMGMappingROS1API
 
   std::vector<std::shared_ptr<rosbag::Bag>> bags_;
 
-  std::ofstream log_file_odom_;
   std::ofstream log_file_pose_;
 };  // class SLAMGMappingROS1Offline : public SLAMGMappingROS1API

@@ -72,7 +72,6 @@ class SLAMGMappingROS1API
 
   virtual void pubEntropy() = 0;
   virtual void pubMap() = 0;
-  virtual void pubOdom(const std_msgs::Header&) = 0;
   virtual void pubPose(const std_msgs::Header&) = 0;
   virtual void pubTransform() = 0;
 

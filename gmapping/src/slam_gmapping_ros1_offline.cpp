@@ -30,16 +30,8 @@ SLAMGMappingROS1Offline::SLAMGMappingROS1Offline(const ParamOffline& param)
 
   ROS_INFO("[%s] bag files :\n%s", ros::this_node::getName().c_str(),
            str.str().c_str());
-  ROS_INFO("[%s] odom topic: %s", ros::this_node::getName().c_str(),
-           param_offline_.odom_topic.c_str());
   ROS_INFO("[%s] scan topic: %s", ros::this_node::getName().c_str(),
            param_offline_.scan_topic.c_str());
-  ROS_INFO("[%s] log file  : %s", ros::this_node::getName().c_str(),
-           param_offline_.enable_log ? param_offline_.log_filename.c_str()
-                                     : "not enabled");
-  ROS_INFO("[%s] log file  : %s", ros::this_node::getName().c_str(),
-           param_offline_.enable_log ? param_offline_.log_filename.c_str()
-                                     : "not enabled");
 
   // Log file processing
   if (param_offline_.enable_log)
@@ -51,17 +43,17 @@ SLAMGMappingROS1Offline::SLAMGMappingROS1Offline(const ParamOffline& param)
           "when log enabled");
     }
 
-    std::string log_file_odom;
     std::string log_file_pose;
 
     try
     {
       std::filesystem::path log_file_path(param_offline_.log_filename);
 
-      log_file_odom = log_file_path.stem().string() + "_odom" +
+      log_file_pose = log_file_path.stem().string() + "_laser" +
                       log_file_path.extension().string();
-      log_file_pose = log_file_path.stem().string() + "_pose" +
-                      log_file_path.extension().string();
+
+      ROS_INFO("[%s] log file  : %s", ros::this_node::getName().c_str(),
+               log_file_pose.c_str());
     }
     catch (const std::filesystem::filesystem_error& e)
     {
@@ -82,20 +74,10 @@ SLAMGMappingROS1Offline::SLAMGMappingROS1Offline(const ParamOffline& param)
           "when processing paths for log files");
     }
 
-    validateAndCreatePath(log_file_odom);
     validateAndCreatePath(log_file_pose);
 
     try
     {
-      log_file_odom_ = std::ofstream(log_file_odom);
-
-      if (!log_file_odom_.is_open())
-      {
-        throw std::runtime_error(
-            "SLAMGMappingROS1Offline::SLAMGMappingROS1Offline | file (" +
-            param_offline_.log_filename + ") for odometry data not opened");
-      }
-
       log_file_pose_ = std::ofstream(log_file_pose);
 
       if (!log_file_pose_.is_open())
@@ -109,10 +91,13 @@ SLAMGMappingROS1Offline::SLAMGMappingROS1Offline(const ParamOffline& param)
     {
       throw std::runtime_error(
           "SLAMGMappingROS1Offline::SLAMGMappingROS1Offline | error when "
-          "opening the log "
-          "files (" +
-          log_file_odom + " ; " + log_file_pose + "): " + e.what());
+          "opening the log file (" +
+          log_file_pose + "): " + e.what());
     }
+  }
+  else
+  {
+    ROS_INFO("[%s] log file  : not enabled", ros::this_node::getName().c_str());
   }
 
   std::cout << std::endl;
@@ -131,11 +116,6 @@ SLAMGMappingROS1Offline::SLAMGMappingROS1Offline(const ParamOffline& param)
 
 SLAMGMappingROS1Offline::~SLAMGMappingROS1Offline()
 {
-  if (param_offline_.enable_log && log_file_odom_.is_open())
-  {
-    log_file_odom_.close();
-  }
-
   if (param_offline_.enable_log && log_file_pose_.is_open())
   {
     log_file_pose_.close();
@@ -270,9 +250,34 @@ void SLAMGMappingROS1Offline::pubMap()
   sstm_.publish(map_.map.info);
 }
 
-void SLAMGMappingROS1Offline::pubOdom(const std_msgs::Header&) {}
+void SLAMGMappingROS1Offline::pubPose(const std_msgs::Header& header)
+{
+  if (!param_offline_.enable_log)
+  {
+    return;
+  }
 
-void SLAMGMappingROS1Offline::pubPose(const std_msgs::Header&) {}
+  GMapping::OrientedPoint mpose =
+      gsp_->getParticles()[gsp_->getBestParticleIndex()].pose;
+
+  tf2::Quaternion mpose_q;
+  mpose_q.setRPY(0, 0, mpose.theta);
+
+  try
+  {
+    log_file_pose_ << std::fixed << std::setprecision(9) << header.stamp.toSec()
+                   << " " << mpose.x << " " << mpose.y << " " << 0 << " "
+                   << mpose_q.x() << " " << mpose_q.y() << " " << mpose_q.z()
+                   << " " << mpose_q.w() << std::endl;
+  }
+  catch (const std::exception& e)
+  {
+    throw std::runtime_error(
+        "SLAMGMappingROS1Offline::pubPose | error when logging the robot data "
+        "(" +
+        std::string(e.what()) + ")");
+  }
+}
 
 void SLAMGMappingROS1Offline::validateAndCreatePath(
     const std::string& file_path)

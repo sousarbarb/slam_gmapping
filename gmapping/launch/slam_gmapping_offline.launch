@@ -5,7 +5,7 @@
   <node pkg="gmapping" type="slam_gmapping_offline" name="slam_gmapping_offline"
     output="screen"
     args="-b /home/sousarbarb97/bag_files/paper_slam_2d/cappero_laser_odom_diag_2020-05-06-16-26-03_fixed_v2.bag
-          --log slam.tum">
+          --log slam_gmapping.tum">
 
     <param name="base_frame" value="base_link" />
     <param name="odom_frame" value="odom" />

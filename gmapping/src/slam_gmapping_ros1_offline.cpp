@@ -244,6 +244,8 @@ void SLAMGMappingROS1Offline::run()
 
     ros::spinOnce();
   }
+
+  ros::spin();
 }
 
 void SLAMGMappingROS1Offline::pubMap()

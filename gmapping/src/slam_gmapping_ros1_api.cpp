@@ -282,35 +282,13 @@ bool SLAMGMappingROS1API::getOdomPose(GMapping::OrientedPoint& gmap_pose,
 bool SLAMGMappingROS1API::initMapper(const sensor_msgs::LaserScan& scan)
 {
   laser_frame_ = scan.header.frame_id;
-  // Get the laser's pose, relative to base.
-  geometry_msgs::PoseStamped ident;
-  geometry_msgs::PoseStamped laser_pose;
-  ident.pose.position.x = 0.0;
-  ident.pose.position.y = 0.0;
-  ident.pose.position.z = 0.0;
-  ident.pose.orientation.w = 1.0;
-  ident.pose.orientation.x = 0.0;
-  ident.pose.orientation.y = 0.0;
-  ident.pose.orientation.z = 0.0;
-  ident.header.frame_id = laser_frame_;
-  ident.header.stamp = scan.header.stamp;
-  try
-  {
-    tf2_buffer_.transform(ident, laser_pose, base_frame_);
-  }
-  catch (const tf2::TransformException& e)
-  {
-    ROS_WARN("Failed to compute laser pose, aborting initialization (%s)",
-             e.what());
-    return false;
-  }
 
   // create a point 1m above the laser position and transform it into the
   // laser-frame
   geometry_msgs::Vector3Stamped up_old;
   up_old.vector.x = 0;
   up_old.vector.y = 0;
-  up_old.vector.z = 1 + laser_pose.pose.position.z;
+  up_old.vector.z = 1;
   up_old.header.frame_id = base_frame_;
   up_old.header.stamp = scan.header.stamp;
   geometry_msgs::Vector3Stamped up;

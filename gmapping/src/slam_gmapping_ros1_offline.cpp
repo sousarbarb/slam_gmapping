@@ -1,5 +1,6 @@
 #include "slam_gmapping_ros1_offline.h"
 
+#include <chrono>
 #include <exception>
 #include <filesystem>
 #include <fstream>
@@ -153,6 +154,8 @@ void SLAMGMappingROS1Offline::run()
 {
   std::cout << std::endl;
 
+  auto start = std::chrono::high_resolution_clock::now();
+
   for (const std::string& filename : param_offline_.bags)
   {
     ROS_INFO("[%s] Opening %s", ros::this_node::getName().c_str(),
@@ -244,6 +247,19 @@ void SLAMGMappingROS1Offline::run()
 
     ros::spinOnce();
   }
+
+  auto end = std::chrono::high_resolution_clock::now();
+
+  ROS_INFO(
+      "\n\n"
+      "[%s] Finished processing the ROS bags.\n"
+      "Elapsed time (s): %.3lf\n"
+      "ros::spin to allow rosrun map_server map_saver OR rviz "
+      "visualization.",
+      ros::this_node::getName().c_str(),
+      std::chrono::duration_cast<std::chrono::microseconds>(end - start)
+              .count() *
+          1e-6);
 
   ros::spin();
 }

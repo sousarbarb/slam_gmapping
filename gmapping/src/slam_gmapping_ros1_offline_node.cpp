@@ -24,11 +24,6 @@ int main(int argc, char* argv[])
           ->multitoken()
           ->value_name("BAGFILE"),
       "ROS bag files to process")(
-      "odomtopic",
-      boost::program_options::value<std::string>(&param.odom_topic)
-          ->default_value("/odom")
-          ->value_name("TOPIC"),
-      "Topic name for the robot's odometry data (used for initialization)")(
       "scantopic",
       boost::program_options::value<std::string>(&param.scan_topic)
           ->default_value("/scan")
@@ -46,7 +41,7 @@ int main(int argc, char* argv[])
       "log",
       boost::program_options::value<std::string>(&param.log_filename)
           ->value_name("FILENAME"),
-      "log the robot estimated data (odom, pose) into TUM files");
+      "log the robot estimated data (laser pose) into TUM files");
 
   /* boost::program_options::positional_options_description opts_pos;
   opts_pos.add("bags", -1); */

@@ -531,9 +531,6 @@ void SLAMGMappingROS1API::laserCallback(
     map_to_odom_ = (odom_to_laser * laser_to_map).inverse();
     map_to_odom_mutex_.unlock();
 
-    pubOdom(scan->header);
-    pubPose(scan->header);
-
     if (!got_map_ ||
         (scan->header.stamp - last_map_update) > map_update_interval_)
     {
@@ -544,6 +541,8 @@ void SLAMGMappingROS1API::laserCallback(
   }
   else
     ROS_DEBUG("cannot process scan");
+
+  pubPose(scan->header);
 }
 
 void SLAMGMappingROS1API::updateMap(const sensor_msgs::LaserScan& scan)

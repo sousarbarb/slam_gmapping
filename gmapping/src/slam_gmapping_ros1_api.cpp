@@ -149,6 +149,8 @@ Initial map dimensions and resolution:
 // compute linear index for given map coords
 #define MAP_IDX(sx, i, j) ((sx) * (j) + (i))
 
+#define RAD2DEG(x) ((x) * 180.0 / M_PI)
+
 SLAMGMappingROS1API::SLAMGMappingROS1API()
     : nh_priv_("~"),
       laser_count_(0),
@@ -187,7 +189,7 @@ void SLAMGMappingROS1API::init()
 
   // The library is pretty chatty
   // gsp_ = new GMapping::GridSlamProcessor(std::cerr);
-  gsp_ = new GMapping::GridSlamProcessor();
+  gsp_ = new GMapping::GridSlamProcessor(std::cout);
   ROS_ASSERT(gsp_);
 
   gsp_laser_ = NULL;
@@ -359,13 +361,17 @@ bool SLAMGMappingROS1API::initMapper(const sensor_msgs::LaserScan& scan)
     theta += std::fabs(scan.angle_increment);
   }
 
-  ROS_DEBUG("Laser angles in laser-frame: min: %.3f max: %.3f inc: %.3f",
-            scan.angle_min, scan.angle_max, scan.angle_increment);
   ROS_DEBUG(
-      "Laser angles in top-down centered laser-frame: min: %.3f max: %.3f inc: "
-      "%.3f",
-      laser_angles_.front(), laser_angles_.back(),
-      std::fabs(scan.angle_increment));
+      "Laser angles in laser-frame: min: %.3f deg max: %.3f deg inc: %.3f deg "
+      "(size: %d)",
+      RAD2DEG(scan.angle_min), RAD2DEG(scan.angle_max),
+      RAD2DEG(scan.angle_increment), static_cast<int>(scan.ranges.size()));
+  ROS_DEBUG(
+      "Laser angles in top-down centered laser-frame: min: %.3f deg max: %.3f "
+      "deg inc: %.3f deg (size: %d)",
+      RAD2DEG(laser_angles_.front()), RAD2DEG(laser_angles_.back()),
+      RAD2DEG(std::fabs(scan.angle_increment)),
+      static_cast<int>(laser_angles_.size()));
 
   GMapping::OrientedPoint gmap_pose(0, 0, 0);
 

@@ -1,5 +1,9 @@
 #pragma once
 
+#include <sys/stat.h>
+#include <termios.h>
+#include <unistd.h>
+
 #include <fstream>
 #include <iostream>
 #include <memory>
@@ -44,6 +48,13 @@ class SLAMGMappingROS1Offline : public SLAMGMappingROS1API
   virtual void pubPose(const std_msgs::Header& header) final;
   virtual void pubTransform() final {}
 
+  virtual void setupTerminal();
+  virtual void restoreTerminal();
+  virtual void printTime(const ros::Time& t, const ros::Duration& duration,
+                         const ros::Duration& bag_length) const;
+
+  virtual char readTerminalKey() const;
+
  private:
 
   SLAMGMappingROS1Offline() = delete;
@@ -53,6 +64,12 @@ class SLAMGMappingROS1Offline : public SLAMGMappingROS1API
  protected:
 
   ParamOffline param_offline_;
+
+  bool paused_ = false;
+
+  bool terminal_modified_ = false;
+
+  termios orig_flags_;
 
   ros::Publisher sst_;
   ros::Publisher sstm_;

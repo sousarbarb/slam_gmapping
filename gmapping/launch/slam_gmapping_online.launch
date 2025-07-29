@@ -1,9 +1,13 @@
 <launch>
 
+  <!-- <env name="ROSCONSOLE_CONFIG_FILE"
+    value="$(dirname)/../config/rosconsole.config" /> -->
+
   <!-- <param name="use_sim_time" value="true" /> -->
 
   <node pkg="gmapping" type="slam_gmapping_online" name="slam_gmapping_online"
     output="screen">
+    <!-- launch-prefix="xterm -e gdb -/-args"/> -->
 
     <param name="base_frame" value="base_link" />
     <param name="odom_frame" value="odom" />

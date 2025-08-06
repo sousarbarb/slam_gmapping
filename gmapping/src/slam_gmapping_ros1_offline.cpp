@@ -504,7 +504,7 @@ void SLAMGMappingROS1Offline::restoreTerminal()
   }
 
   const int fd = fileno(stdin);
-  m_orig_flags_.c_lflag |= (ICANON);  // always restore canonical mode
+  orig_flags_.c_lflag |= (ICANON);  // always restore canonical mode
   tcsetattr(fd, TCSANOW, &orig_flags_);
 
   terminal_modified_ = false;

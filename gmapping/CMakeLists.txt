@@ -50,7 +50,6 @@ target_link_libraries(slam_gmapping_offline
 if(catkin_EXPORTED_TARGETS)
   add_dependencies(slam_gmapping_offline
     ${catkin_EXPORTED_TARGETS}
-    Boost::program_options
   )
 endif()
 

@@ -55,8 +55,11 @@ SLAMGMappingROS1Offline::SLAMGMappingROS1Offline(const ParamOffline& param)
     {
       std::filesystem::path log_file_path(param_offline_.log_filename);
 
-      log_file_pose = log_file_path.stem().string() + "_gmapping_laser" +
-                      log_file_path.extension().string();
+      std::filesystem::path dir = log_file_path.parent_path();
+      std::string stem = log_file_path.stem().string();
+      std::string ext = log_file_path.extension().string();
+
+      log_file_pose = (dir / (stem + "_gmapping_pose" + ext)).string();
 
       ROS_INFO("[%s] log file  : %s", ros::this_node::getName().c_str(),
                log_file_pose.c_str());

@@ -12,6 +12,7 @@
 // ROS
 #include <rosbag/bag.h>
 #include <tf2_ros/message_filter.h>
+#include <tf2_ros/transform_broadcaster.h>
 
 // Boost
 #include <boost/thread.hpp>
@@ -75,6 +76,7 @@ class SLAMGMappingROS1Offline : public SLAMGMappingROS1API
   ros::Publisher sstm_;
 
   std::unique_ptr<tf2_ros::MessageFilter<sensor_msgs::LaserScan>> scan_filter_;
+  std::unique_ptr<tf2_ros::TransformBroadcaster> tf2_pub_;
 
   std::vector<std::shared_ptr<rosbag::Bag>> bags_;
 

@@ -13,6 +13,7 @@
 #include <vector>
 
 // ROS
+#include <geometry_msgs/TransformStamped.h>
 #include <rosbag/query.h>
 #include <rosbag/view.h>
 #include <tf2/exceptions.h>
@@ -20,7 +21,9 @@
 #include <tf2_msgs/TFMessage.h>
 
 SLAMGMappingROS1Offline::SLAMGMappingROS1Offline(const ParamOffline& param)
-    : SLAMGMappingROS1API::SLAMGMappingROS1API(), param_offline_(param)
+    : SLAMGMappingROS1API::SLAMGMappingROS1API(),
+      param_offline_(param),
+      tf2_pub_(std::make_unique<tf2_ros::TransformBroadcaster>())
 {
   ros::Time::init();
 
@@ -373,6 +376,18 @@ void SLAMGMappingROS1Offline::pubPose(const std_msgs::Header& header)
 
   tf2::Quaternion mpose_q;
   mpose_q.setRPY(0, 0, mpose.theta);
+
+  tf2::Transform map_to_base =
+      tf2::Transform(mpose_q, tf2::Vector3(mpose.x, mpose.y, 0.0));
+
+  geometry_msgs::TransformStamped msg;
+
+  msg.header.frame_id = map_frame_;
+  msg.header.stamp = ros::Time::now();
+  msg.child_frame_id = base_frame_;
+  msg.transform = tf2::toMsg(map_to_base);
+
+  tf2_pub_->sendTransform(msg);
 
   try
   {

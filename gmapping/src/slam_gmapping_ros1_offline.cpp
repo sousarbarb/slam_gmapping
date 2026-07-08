@@ -151,7 +151,7 @@ void SLAMGMappingROS1Offline::run()
 {
   std::cout << std::endl;
 
-  setupTerminal();
+  // setupTerminal();
 
   auto start = std::chrono::high_resolution_clock::now();
 
@@ -260,7 +260,7 @@ void SLAMGMappingROS1Offline::run()
 
   for (rosbag::MessageInstance const& msg : view)
   {
-    while (true)
+    /* while (true)
     {
       char key = readTerminalKey();
 
@@ -288,7 +288,7 @@ void SLAMGMappingROS1Offline::run()
       }
 
       std::this_thread::sleep_for(std::chrono::milliseconds(50));
-    }
+    } */
 
     if (msg.instantiate<sensor_msgs::LaserScan>() != nullptr)
     {
@@ -322,7 +322,7 @@ exit_loop:
 
   auto end = std::chrono::high_resolution_clock::now();
 
-  restoreTerminal();
+  // restoreTerminal();
 
   std::cout << std::endl << std::flush;
 
@@ -353,7 +353,7 @@ exit_loop:
     }
   }
 
-  restoreTerminal();
+  // restoreTerminal();
 
   ros::spin();
 }

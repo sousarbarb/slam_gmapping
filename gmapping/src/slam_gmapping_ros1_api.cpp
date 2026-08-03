@@ -138,7 +138,9 @@ Initial map dimensions and resolution:
 #include "slam_gmapping_ros1_api.h"
 
 // ROS
+#include <geometry_msgs/PoseArray.h>
 #include <geometry_msgs/TransformStamped.h>
+#include <tf/transform_datatypes.h>
 #include <tf2/exceptions.h>
 #include <tf2/utils.h>
 
@@ -249,6 +251,10 @@ void SLAMGMappingROS1API::init()
 
   if (!nh_priv_.getParam("tf_delay", tf_delay_))
     tf_delay_ = transform_publish_period_;
+
+  // Particle pose distribution publisher
+  particle_pose_publisher_ =
+      nh_priv_.advertise<geometry_msgs::PoseArray>("particlecloud", 1, false);
 }
 
 SLAMGMappingROS1API::~SLAMGMappingROS1API()
@@ -553,6 +559,31 @@ void SLAMGMappingROS1API::laserCallback(
     ROS_DEBUG("cannot process scan");
 
   pubPose(scan->header);
+  publishParticlesPose(scan->header.stamp);
+}
+
+void SLAMGMappingROS1API::publishParticlesPose(const ros::Time& timestamp)
+{
+  geometry_msgs::PoseArray msg_particles;
+
+  msg_particles.header.frame_id = map_frame_;
+  msg_particles.header.stamp = timestamp;
+
+  for (GMapping::GridSlamProcessor::ParticleVector::const_iterator it =
+           gsp_->getParticles().begin();
+       it != gsp_->getParticles().end(); it++)
+  {
+    GMapping::OrientedPoint particle_pose = it->pose;
+    geometry_msgs::Pose pose;
+    pose.position.x = particle_pose.x;
+    pose.position.y = particle_pose.y;
+    pose.position.z = 0;
+    pose.orientation = tf::createQuaternionMsgFromYaw(particle_pose.theta);
+
+    msg_particles.poses.push_back(pose);
+  }
+
+  particle_pose_publisher_.publish(msg_particles);
 }
 
 void SLAMGMappingROS1API::updateMap()

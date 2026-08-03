@@ -68,6 +68,7 @@ class SLAMGMappingROS1API
   bool initMapper(const sensor_msgs::LaserScan& scan);
   bool addScan(const sensor_msgs::LaserScan& scan,
                GMapping::OrientedPoint& gmap_pose);
+  void publishParticlesPose(const ros::Time& timestamp);
   void updateMap();
 
   virtual void pubEntropy() = 0;
@@ -79,6 +80,8 @@ class SLAMGMappingROS1API
 
   ros::NodeHandle nh_;
   ros::NodeHandle nh_priv_;
+
+  ros::Publisher particle_pose_publisher_;
 
   tf2_ros::Buffer tf2_buffer_;
 

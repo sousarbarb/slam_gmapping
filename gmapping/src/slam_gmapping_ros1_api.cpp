@@ -499,6 +499,9 @@ void SLAMGMappingROS1API::laserCallback(
 
   static ros::Time last_map_update(0, 0);
 
+  scan_ranges_size_ = scan->ranges.size();
+  scan_stamp_ = scan->header.stamp;
+
   // We can't initialize the mapper until we've got the first scan
   if (!got_first_scan_)
   {
@@ -537,10 +540,11 @@ void SLAMGMappingROS1API::laserCallback(
     map_to_odom_ = (odom_to_laser * laser_to_map).inverse();
     map_to_odom_mutex_.unlock();
 
-    if (!got_map_ ||
-        (scan->header.stamp - last_map_update) > map_update_interval_)
+    if ((!got_map_ ||
+         (scan->header.stamp - last_map_update) > map_update_interval_) &&
+        map_update_interval_.toSec() > 0)
     {
-      updateMap(*scan);
+      updateMap();
       last_map_update = scan->header.stamp;
       ROS_DEBUG("Updated the map");
     }
@@ -551,13 +555,13 @@ void SLAMGMappingROS1API::laserCallback(
   pubPose(scan->header);
 }
 
-void SLAMGMappingROS1API::updateMap(const sensor_msgs::LaserScan& scan)
+void SLAMGMappingROS1API::updateMap()
 {
   ROS_DEBUG("Update map");
   boost::mutex::scoped_lock map_lock(map_mutex_);
   GMapping::ScanMatcher matcher;
 
-  matcher.setLaserParameters(scan.ranges.size(), &(laser_angles_[0]),
+  matcher.setLaserParameters(scan_ranges_size_, &(laser_angles_[0]),
                              gsp_laser_->getPose());
 
   matcher.setlaserMaxRange(maxRange_);
@@ -653,7 +657,7 @@ void SLAMGMappingROS1API::updateMap(const sensor_msgs::LaserScan& scan)
   got_map_ = true;
 
   // make sure to set the header information on the map
-  map_.map.header.stamp = scan.header.stamp;
+  map_.map.header.stamp = scan_stamp_;
   map_.map.header.frame_id = map_frame_;
 
   pubMap();

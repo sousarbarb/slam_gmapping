@@ -337,6 +337,15 @@ exit_loop:
               .count() *
           1e-6);
 
+  ROS_INFO(
+      "\n\n"
+      "[%s] Updating one last time the 2D occupancy grid map...",
+      ros::this_node::getName().c_str());
+
+  updateMap();
+
+  ros::spinOnce();
+
   if (param_offline_.enable_log && log_file_pose_.is_open())
   {
     log_file_pose_.close();

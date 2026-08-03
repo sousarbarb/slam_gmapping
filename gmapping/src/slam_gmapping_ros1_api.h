@@ -68,7 +68,7 @@ class SLAMGMappingROS1API
   bool initMapper(const sensor_msgs::LaserScan& scan);
   bool addScan(const sensor_msgs::LaserScan& scan,
                GMapping::OrientedPoint& gmap_pose);
-  void updateMap(const sensor_msgs::LaserScan& scan);
+  void updateMap();
 
   virtual void pubEntropy() = 0;
   virtual void pubMap() = 0;
@@ -112,6 +112,10 @@ class SLAMGMappingROS1API
   std::string laser_frame_;
   std::string map_frame_;
   std::string odom_frame_;
+
+  // Cache... (updateMap)
+  size_t scan_ranges_size_;
+  ros::Time scan_stamp_;
 
   // Parameters used by GMapping
   double maxRange_;

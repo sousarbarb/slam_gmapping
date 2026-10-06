@@ -1,0 +1,103 @@
+# =============================================================================
+# GMapping parameters (private namespace of the node, i.e. ~<param>)
+#
+# Used by: slam_gmapping_online, slam_gmapping_offline
+#          (the original slam_gmapping / slam_gmapping_nodelet /
+#          slam_gmapping_replay read the same names)
+#
+# Load inside the <node> element of a launch file:
+#   <rosparam command="load" file="$(find gmapping)/config/slam_gmapping.yaml"/>
+#
+# Values below reproduce the defaults hard-coded in
+# src/slam_gmapping_ros1_api.cpp, except maxRange / maxUrange (see below).
+#
+# Types: a value of the wrong type (e.g. a quoted number such as "30") makes
+# getParam() fail and the node SILENTLY falls back to the hard-coded default.
+# roscpp converts int -> double, and rounds double -> int for the integer
+# parameters (throttle_scans, kernelSize, iterations, lskip, particles).
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# ROS wrapper
+# -----------------------------------------------------------------------------
+base_frame: base_link      # robot base frame (planarity check, logged poses)
+odom_frame: odom           # odometry frame (odom -> base_frame must be in TF)
+map_frame: map             # frame of the map / estimated poses
+
+throttle_scans: 1          # [int] process 1 out of every N scans
+
+# Seconds (scan time) between two map recomputations.
+#   > 0 : periodic map update (upstream behaviour)
+#   <= 0: no map update while processing scans
+#         - offline node: the map is computed once, after the bags end
+#           (used for timing evaluation of the SLAM front-end alone)
+#         - online node : the map is NEVER computed or published, and the
+#           dynamic_map service always fails -> do not use <= 0 online
+map_update_interval: 5.0
+
+# Online node only: period [s] of the map -> odom TF broadcast thread
+# (0 disables the thread). In the offline node it only sets the default of
+# tf_delay, which the offline node does not use.
+transform_publish_period: 0.05
+# tf_delay: 0.05           # online only; map -> odom stamped now + tf_delay
+                           # (default: transform_publish_period)
+
+# -----------------------------------------------------------------------------
+# Laser / scan matcher
+# -----------------------------------------------------------------------------
+# maxRange / maxUrange are sensor-specific. If both are omitted:
+#   maxRange  = LaserScan.range_max - 0.01 (from the first scan)
+#   maxUrange = maxRange
+# To have obstacle-free regions appear as free space:
+#   maxUrange < real maximum range of the sensor <= maxRange
+maxRange: 10.0             # [m] maximum sensor range
+maxUrange: 8.0             # [m] maximum usable range; beams are cropped here
+
+sigma: 0.05                # sigma of the greedy endpoint matching
+kernelSize: 1              # [int] search kernel for correspondences
+lstep: 0.05                # [m] optimisation step in translation
+astep: 0.05                # [rad] optimisation step in rotation
+iterations: 5              # [int] scan matcher refinement iterations
+lsigma: 0.075              # sigma of a beam for the likelihood computation
+ogain: 3.0                 # likelihood smoothing gain (resampling effects)
+lskip: 0                   # [int] use every (lskip+1)-th beam (0 = all)
+minimumScore: 0.0          # min. scan-matching score to accept the match
+                           # (scores go up to 600+; ~50 helps against pose
+                           # jumps in open spaces with short-range lasers)
+
+# -----------------------------------------------------------------------------
+# Motion model (odometry error, std. dev. of a Gaussian model)
+# -----------------------------------------------------------------------------
+srr: 0.1                   # translation error from translation
+srt: 0.2                   # translation error from rotation
+str: 0.1                   # rotation error from translation
+stt: 0.2                   # rotation error from rotation
+
+# -----------------------------------------------------------------------------
+# Filter updates and resampling
+# -----------------------------------------------------------------------------
+linearUpdate: 1.0          # [m] process a scan after this translation
+angularUpdate: 0.5         # [rad] process a scan after this rotation
+temporalUpdate: -1.0       # [s] process a scan if the last processed one is
+                           # older than this (< 0 disables time-based updates)
+resampleThreshold: 0.5     # resample when Neff < resampleThreshold * particles
+particles: 30              # [int] number of particles
+
+# -----------------------------------------------------------------------------
+# Map
+# -----------------------------------------------------------------------------
+xmin: -100.0               # [m] initial map extent (grows if needed)
+ymin: -100.0
+xmax: 100.0
+ymax: 100.0
+delta: 0.05                # [m/cell] map resolution
+occ_thresh: 0.25           # cells with occupancy > occ_thresh -> 100,
+                           # [0, occ_thresh] -> 0, never observed -> -1
+
+# -----------------------------------------------------------------------------
+# Likelihood sampling (scan matching)
+# -----------------------------------------------------------------------------
+llsamplerange: 0.01        # [m] translational sampling range
+llsamplestep: 0.01         # [m] translational sampling step
+lasamplerange: 0.005       # [rad] angular sampling range
+lasamplestep: 0.005        # [rad] angular sampling step

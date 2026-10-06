@@ -41,7 +41,18 @@ int main(int argc, char* argv[])
       "log",
       boost::program_options::value<std::string>(&param.log_filename)
           ->value_name("FILENAME"),
-      "log the robot estimated data (laser pose) into TUM files");
+      "log the robot estimated data (base_frame pose) into TUM files")(
+      "seed",
+      boost::program_options::value<unsigned long>(&param.seed)
+          ->default_value(0)
+          ->value_name("N"),
+      "seed for GMapping's random number generator (0: from time)")(
+      "spin",
+      boost::program_options::value<bool>(&param.spin)
+          ->default_value(true)
+          ->value_name("BOOL"),
+      "keep spinning after processing the bags (map_saver, rviz); false: "
+      "exit");
 
   /* boost::program_options::positional_options_description opts_pos;
   opts_pos.add("bags", -1); */

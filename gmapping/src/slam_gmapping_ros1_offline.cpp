@@ -4,6 +4,7 @@
 #include <sys/ioctl.h>
 
 #include <chrono>
+#include <cmath>
 #include <exception>
 #include <filesystem>
 #include <fstream>
@@ -19,6 +20,18 @@
 #include <tf2/exceptions.h>
 #include <tf2/utils.h>
 #include <tf2_msgs/TFMessage.h>
+
+namespace
+{
+
+tf2::Transform toTransform(const GMapping::OrientedPoint& p)
+{
+  tf2::Quaternion q;
+  q.setRPY(0, 0, p.theta);
+  return tf2::Transform(q, tf2::Vector3(p.x, p.y, 0.0));
+}
+
+}  // namespace
 
 SLAMGMappingROS1Offline::SLAMGMappingROS1Offline(const ParamOffline& param)
     : SLAMGMappingROS1API::SLAMGMappingROS1API(),
@@ -42,6 +55,17 @@ SLAMGMappingROS1Offline::SLAMGMappingROS1Offline(const ParamOffline& param)
   ROS_INFO("[%s] scan topic: %s", ros::this_node::getName().c_str(),
            param_offline_.scan_topic.c_str());
 
+  // Random seed: the base constructor sets seed_ = time(NULL); initMapper()
+  // later seeds drand48 with seed_ on the first scan, which makes a run
+  // reproducible for a given seed (GMapping draws all samples from drand48)
+  if (param_offline_.seed != 0)
+  {
+    seed_ = param_offline_.seed;
+  }
+
+  ROS_INFO("[%s] seed      : %lu%s", ros::this_node::getName().c_str(), seed_,
+           (param_offline_.seed != 0) ? "" : " (from time)");
+
   // Log file processing
   if (param_offline_.enable_log)
   {
@@ -53,6 +77,8 @@ SLAMGMappingROS1Offline::SLAMGMappingROS1Offline(const ParamOffline& param)
     }
 
     std::string log_file_pose;
+    std::string log_file_tf;
+    std::string log_file_traj;
 
     try
     {
@@ -63,9 +89,15 @@ SLAMGMappingROS1Offline::SLAMGMappingROS1Offline(const ParamOffline& param)
       std::string ext = log_file_path.extension().string();
 
       log_file_pose = (dir / (stem + "_gmapping_pose" + ext)).string();
+      log_file_tf = (dir / (stem + "_gmapping_tf" + ext)).string();
+      log_file_traj = (dir / (stem + "_gmapping_traj" + ext)).string();
 
       ROS_INFO("[%s] log file  : %s", ros::this_node::getName().c_str(),
                log_file_pose.c_str());
+      ROS_INFO("[%s] log file  : %s", ros::this_node::getName().c_str(),
+               log_file_tf.c_str());
+      ROS_INFO("[%s] log file  : %s", ros::this_node::getName().c_str(),
+               log_file_traj.c_str());
     }
     catch (const std::filesystem::filesystem_error& e)
     {
@@ -88,24 +120,9 @@ SLAMGMappingROS1Offline::SLAMGMappingROS1Offline(const ParamOffline& param)
 
     validateAndCreatePath(log_file_pose);
 
-    try
-    {
-      log_file_pose_ = std::ofstream(log_file_pose);
-
-      if (!log_file_pose_.is_open())
-      {
-        throw std::runtime_error(
-            "SLAMGMappingROS1Offline::SLAMGMappingROS1Offline | file (" +
-            param_offline_.log_filename + ") for pose data not opened");
-      }
-    }
-    catch (const std::exception& e)
-    {
-      throw std::runtime_error(
-          "SLAMGMappingROS1Offline::SLAMGMappingROS1Offline | error when "
-          "opening the log file (" +
-          log_file_pose + "): " + e.what());
-    }
+    openLogFile(log_file_pose_, log_file_pose);
+    openLogFile(log_file_tf_, log_file_tf);
+    openLogFile(log_file_traj_, log_file_traj);
   }
   else
   {
@@ -128,9 +145,12 @@ SLAMGMappingROS1Offline::SLAMGMappingROS1Offline(const ParamOffline& param)
 
 SLAMGMappingROS1Offline::~SLAMGMappingROS1Offline()
 {
-  if (param_offline_.enable_log && log_file_pose_.is_open())
+  for (std::ofstream* file : {&log_file_pose_, &log_file_tf_, &log_file_traj_})
   {
-    log_file_pose_.close();
+    if (file->is_open())
+    {
+      file->close();
+    }
   }
 
   for (const std::shared_ptr<rosbag::Bag>& bag : bags_)
@@ -342,13 +362,28 @@ exit_loop:
       "[%s] Updating one last time the 2D occupancy grid map...",
       ros::this_node::getName().c_str());
 
+  if (!got_first_scan_)
+  {
+    throw std::runtime_error(
+        "SLAMGMappingROS1Offline::run | no scan was processed (check the scan "
+        "topic and the TF tree)");
+  }
+
   updateMap();
 
   ros::spinOnce();
 
   if (param_offline_.enable_log && log_file_pose_.is_open())
   {
-    log_file_pose_.close();
+    writeTrajectory();
+  }
+
+  for (std::ofstream* file : {&log_file_pose_, &log_file_tf_, &log_file_traj_})
+  {
+    if (file->is_open())
+    {
+      file->close();
+    }
   }
 
   for (const std::shared_ptr<rosbag::Bag>& bag : bags_)
@@ -364,7 +399,11 @@ exit_loop:
 
   // restoreTerminal();
 
-  ros::spin();
+  // --spin false: return, so the node exits (batch runs, required="true")
+  if (param_offline_.spin)
+  {
+    ros::spin();
+  }
 }
 
 void SLAMGMappingROS1Offline::pubMap()
@@ -380,14 +419,43 @@ void SLAMGMappingROS1Offline::pubPose(const std_msgs::Header& header)
     return;
   }
 
-  GMapping::OrientedPoint mpose =
+  // pubPose() only runs after initMapper() succeeded, which set the centered
+  // laser frame that GMapping estimates
+  if (!centered_laser_to_base_ready_)
+  {
+    initCenteredLaserToBase(header.stamp);
+  }
+
+  // Odometry pose of the base at this scan; if unavailable, the scan was
+  // skipped by addScan() and no estimate is logged for it
+  tf2::Transform odom_to_base;
+
+  try
+  {
+    const geometry_msgs::TransformStamped tf_msg =
+        tf2_buffer_.lookupTransform(odom_frame_, base_frame_, header.stamp);
+
+    const geometry_msgs::Vector3& t = tf_msg.transform.translation;
+    const geometry_msgs::Quaternion& q = tf_msg.transform.rotation;
+
+    odom_to_base = tf2::Transform(tf2::Quaternion(q.x, q.y, q.z, q.w),
+                                  tf2::Vector3(t.x, t.y, t.z));
+  }
+  catch (const tf2::TransformException&)
+  {
+    return;
+  }
+
+  const double stamp = header.stamp.toSec();
+
+  // (1) Best particle at every scan. Between updates, processScan() moves
+  // every particle by sampling the motion model, so this pose random-walks
+  // around odometry until the next update corrects it.
+  const GMapping::OrientedPoint mpose =
       gsp_->getParticles()[gsp_->getBestParticleIndex()].pose;
 
-  tf2::Quaternion mpose_q;
-  mpose_q.setRPY(0, 0, mpose.theta);
-
-  tf2::Transform map_to_base =
-      tf2::Transform(mpose_q, tf2::Vector3(mpose.x, mpose.y, 0.0));
+  const tf2::Transform map_to_base =
+      toTransform(mpose) * centered_laser_to_base_;
 
   geometry_msgs::TransformStamped msg;
 
@@ -398,18 +466,141 @@ void SLAMGMappingROS1Offline::pubPose(const std_msgs::Header& header)
 
   tf2_pub_->sendTransform(msg);
 
+  writeTUM(log_file_pose_, stamp, map_to_base);
+
+  // (2) map->odom from the last update composed with odom->base: the pose
+  // that the standard slam_gmapping node yields through /tf
+  map_to_odom_mutex_.lock();
+  const tf2::Transform map_to_base_tf = map_to_odom_ * odom_to_base;
+  map_to_odom_mutex_.unlock();
+
+  writeTUM(log_file_tf_, stamp, map_to_base_tf);
+}
+
+void SLAMGMappingROS1Offline::writeTrajectory()
+{
+  if (!param_offline_.enable_log || !got_first_scan_ ||
+      !centered_laser_to_base_ready_)
+  {
+    return;
+  }
+
+  // (3) Final best particle: its trajectory tree holds one pose per update,
+  // consistent with the final map (corrections from resampling included)
+  const GMapping::GridSlamProcessor::Particle& best =
+      gsp_->getParticles()[gsp_->getBestParticleIndex()];
+
+  std::vector<std::pair<double, GMapping::OrientedPoint>> trajectory;
+
+  for (const GMapping::GridSlamProcessor::TNode* n = best.node; n;
+       n = n->parent)
+  {
+    if (n->reading)
+    {
+      trajectory.emplace_back(n->reading->getTime(), n->pose);
+    }
+  }
+
+  for (auto it = trajectory.rbegin(); it != trajectory.rend(); ++it)
+  {
+    writeTUM(log_file_traj_, it->first,
+             toTransform(it->second) * centered_laser_to_base_);
+  }
+
+  ROS_INFO("[%s] Final best-particle trajectory: %zu poses",
+           ros::this_node::getName().c_str(), trajectory.size());
+}
+
+void SLAMGMappingROS1Offline::initCenteredLaserToBase(const ros::Time& stamp)
+{
+  // centered laser in the laser frame (pose set by initMapper(): laser origin,
+  // yaw rotated to the center of the scan, z up even if mounted upside down)
+  const geometry_msgs::Pose& cl = centered_laser_pose_.pose;
+
+  const tf2::Transform laser_to_centered_laser(
+      tf2::Quaternion(cl.orientation.x, cl.orientation.y, cl.orientation.z,
+                      cl.orientation.w),
+      tf2::Vector3(cl.position.x, cl.position.y, cl.position.z));
+
+  // base in the laser frame (the same lookup initMapper() just succeeded with)
+  tf2::Transform laser_to_base;
+
   try
   {
-    log_file_pose_ << std::fixed << std::setprecision(9) << header.stamp.toSec()
-                   << " " << mpose.x << " " << mpose.y << " " << 0 << " "
-                   << mpose_q.x() << " " << mpose_q.y() << " " << mpose_q.z()
-                   << " " << mpose_q.w() << std::endl;
+    const geometry_msgs::TransformStamped tf_msg =
+        tf2_buffer_.lookupTransform(laser_frame_, base_frame_, stamp);
+
+    const geometry_msgs::Vector3& t = tf_msg.transform.translation;
+    const geometry_msgs::Quaternion& q = tf_msg.transform.rotation;
+
+    laser_to_base = tf2::Transform(tf2::Quaternion(q.x, q.y, q.z, q.w),
+                                   tf2::Vector3(t.x, t.y, t.z));
+  }
+  catch (const tf2::TransformException& e)
+  {
+    throw std::runtime_error(
+        "SLAMGMappingROS1Offline::initCenteredLaserToBase | unable to look up "
+        "the transform from " +
+        base_frame_ + " to " + laser_frame_ + " (" + e.what() + ")");
+  }
+
+  centered_laser_to_base_ = laser_to_centered_laser.inverse() * laser_to_base;
+  centered_laser_to_base_ready_ = true;
+
+  // base_frame_ -> centered laser offset, i.e. the lever arm removed from the
+  // logged poses
+  const tf2::Transform base_to_cl = centered_laser_to_base_.inverse();
+  double roll, pitch, yaw;
+  tf2::Matrix3x3(base_to_cl.getRotation()).getRPY(roll, pitch, yaw);
+
+  ROS_INFO(
+      "[%s] Logging %s poses; centered laser in %s: x %.4f y %.4f z %.4f (m), "
+      "yaw %.3f (deg)",
+      ros::this_node::getName().c_str(), base_frame_.c_str(),
+      base_frame_.c_str(), base_to_cl.getOrigin().x(),
+      base_to_cl.getOrigin().y(), base_to_cl.getOrigin().z(),
+      yaw * 180.0 / M_PI);
+}
+
+void SLAMGMappingROS1Offline::openLogFile(std::ofstream& file,
+                                          const std::string& filename)
+{
+  file.open(filename);
+
+  if (!file.is_open())
+  {
+    throw std::runtime_error(
+        "SLAMGMappingROS1Offline::openLogFile | error when opening the log "
+        "file (" +
+        filename + ")");
+  }
+
+  file << std::fixed << std::setprecision(9);
+}
+
+void SLAMGMappingROS1Offline::writeTUM(std::ofstream& file, double stamp,
+                                       const tf2::Transform& pose)
+{
+  // Planar pose (x, y, yaw; z = 0), as GMapping estimates in 2D; drops the
+  // height of base_frame_ below the laser
+  double roll, pitch, yaw;
+  tf2::Matrix3x3(pose.getRotation()).getRPY(roll, pitch, yaw);
+
+  tf2::Quaternion q;
+  q.setRPY(0.0, 0.0, yaw);
+
+  const tf2::Vector3& t = pose.getOrigin();
+
+  try
+  {
+    file << stamp << " " << t.x() << " " << t.y() << " " << 0.0 << " " << q.x()
+         << " " << q.y() << " " << q.z() << " " << q.w() << "\n";
   }
   catch (const std::exception& e)
   {
     throw std::runtime_error(
-        "SLAMGMappingROS1Offline::pubPose | error when logging the robot data "
-        "(" +
+        "SLAMGMappingROS1Offline::writeTUM | error when logging the robot "
+        "data (" +
         std::string(e.what()) + ")");
   }
 }
@@ -458,7 +649,7 @@ void SLAMGMappingROS1Offline::validateAndCreatePath(
       ROS_INFO("[%s] Directory doesn't exist. Creating: %s",
                ros::this_node::getName().c_str(), directory.string().c_str());
 
-      if (std::filesystem::create_directory(directory))
+      if (std::filesystem::create_directories(directory))
       {
         ROS_INFO("[%s] Directory created successfully.",
                  ros::this_node::getName().c_str());

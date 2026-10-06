@@ -5,12 +5,14 @@
 #include <unistd.h>
 
 #include <fstream>
+#include <iomanip>
 #include <iostream>
 #include <memory>
 #include <vector>
 
 // ROS
 #include <rosbag/bag.h>
+#include <tf2/LinearMath/Transform.h>
 #include <tf2_ros/message_filter.h>
 #include <tf2_ros/transform_broadcaster.h>
 
@@ -28,11 +30,13 @@ class SLAMGMappingROS1Offline : public SLAMGMappingROS1API
   {
     std::vector<std::string> bags;  //!< set of ROS bag files to process
     std::string scan_topic;         //!< scan topic name for 2D laser data
-    bool has_duration;         //!< duration from the start time set in options
-    double time_start;         //!< start time (s) into the bag files
-    double time_duration;      //!< duration (s) to only process from the bags
-    bool enable_log;           //!< enable log of robot data (pose) into TUM
+    bool has_duration = false;      //!< duration from the start time set
+    double time_start = 0.0;        //!< start time (s) into the bag files
+    double time_duration = 0.0;     //!< duration (s) to only process from bags
+    bool enable_log = false;   //!< enable log of robot data (pose) into TUM
     std::string log_filename;  //!< log filename
+    unsigned long seed = 0;    //!< GMapping RNG seed (0: from time)
+    bool spin = true;          //!< keep spinning after processing the bags
   };  // struct SLAMGMappingROS1Offline::ParamOffline
 
  public:
@@ -61,6 +65,10 @@ class SLAMGMappingROS1Offline : public SLAMGMappingROS1API
   SLAMGMappingROS1Offline() = delete;
 
   void validateAndCreatePath(const std::string& file_path);
+  void openLogFile(std::ofstream& file, const std::string& filename);
+  void writeTUM(std::ofstream& file, double stamp, const tf2::Transform& pose);
+  void writeTrajectory();
+  void initCenteredLaserToBase(const ros::Time& stamp);
 
  protected:
 
@@ -80,5 +88,13 @@ class SLAMGMappingROS1Offline : public SLAMGMappingROS1API
 
   std::vector<std::shared_ptr<rosbag::Bag>> bags_;
 
-  std::ofstream log_file_pose_;
+  // Logs (TUM) of the base_frame_ pose in map_frame_
+  std::ofstream log_file_pose_;  //!< best particle, every scan
+  std::ofstream log_file_tf_;    //!< map->odom (last update) * odom, every scan
+  std::ofstream log_file_traj_;  //!< final best particle, one pose per update
+
+  //! GMapping estimates the pose of the centered laser (see initMapper());
+  //! this static transform maps it to base_frame_
+  tf2::Transform centered_laser_to_base_;
+  bool centered_laser_to_base_ready_ = false;
 };  // class SLAMGMappingROS1Offline : public SLAMGMappingROS1API

@@ -208,7 +208,8 @@ Processing steps:
    - messages of type `tf2_msgs/TFMessage` on any topic go into the tf2
      buffer (as static only if the topic is `/tf_static`);
    - all other topics are ignored.
-4. Print the elapsed wall time of step 3. This excludes the final map update.
+4. Print the elapsed wall time of steps 1 to 3 (the timer starts before the
+   bags are opened). This excludes the final map update.
 5. Build and publish the map one last time, write the `_traj` log, close the
    logs and the bags.
 6. `--spin true`: keep spinning; `--spin false`: exit.
@@ -234,9 +235,9 @@ rosrun map_server map_saver -f /data/results/run_map
 ```
 
 Timing evaluation: with `map_update_interval <= 0`, no map is built while the
-bags are processed, so the elapsed time printed in step 4 covers scan
-processing only (scan matching and particle filter); the map is built once
-afterwards.
+bags are processed, so the elapsed time printed in step 4 covers opening and
+reading the bags and processing the messages (tf2 buffer, scan matching,
+particle filter), without any map building; the map is built once afterwards.
 
 Caveats:
 
@@ -362,7 +363,7 @@ integers to doubles and rounds doubles given to integer parameters.
 | `maxRange` | double | `range_max - 0.01` | Maximum range of the sensor [m]. Default taken from the first scan. |
 | `maxUrange` | double | `maxRange` | Maximum usable range [m]; beams are cropped to this value. For obstacle-free regions to appear as free space: `maxUrange < real sensor range <= maxRange`. |
 | `sigma` | double | `0.05` | Sigma of the greedy endpoint matching. |
-| `kernelSize` | int | `1` | Kernel in which to look for a correspondence. |
+| `kernelSize` | int | `1` | Kernel in which to look for a correspondence, in cells: the search window is `+-kernelSize * delta` (scales with the map resolution). |
 | `lstep` | double | `0.05` | Optimisation step in translation [m]. |
 | `astep` | double | `0.05` | Optimisation step in rotation [rad]. |
 | `iterations` | int | `5` | Iterations of the scan matcher. |
@@ -373,14 +374,27 @@ integers to doubles and rounds doubles given to integer parameters.
 
 ### Motion model
 
-Standard deviations of the odometry error model.
+Coefficients of the standard deviations of the odometry error model. GMapping
+samples the noise on the motion `(dx, dy, dtheta)` of the centred laser frame
+(the frame it tracks, see [Output files](#output-files-tum-logs)) between two
+scans, expressed in the frame of the previous pose
+(`MotionModel::drawFromMotion` in `openslam_gmapping`):
+
+```
+sigma_x     = srr * |dx| + str * |dtheta| + 0.3 * srr * |dy|
+sigma_y     = srr * |dy| + str * |dtheta| + 0.3 * srr * |dx|
+sigma_theta = stt * |dtheta| + srt * sqrt(dx^2 + dy^2)
+```
 
 | Parameter | Type | Default | Description |
 | --- | --- | --- | --- |
-| `srr` | double | `0.1` | Translation error as a function of translation. |
-| `srt` | double | `0.2` | Translation error as a function of rotation. |
-| `str` | double | `0.1` | Rotation error as a function of translation. |
-| `stt` | double | `0.2` | Rotation error as a function of rotation. |
+| `srr` | double | `0.1` | Translation error as a function of translation [m/m]. |
+| `srt` | double | `0.2` | Rotation error as a function of translation [rad/m]. |
+| `str` | double | `0.1` | Translation error as a function of rotation [m/rad]. |
+| `stt` | double | `0.2` | Rotation error as a function of rotation [rad/rad]. |
+
+The ROS wiki describes `srt` and `str` the other way round; the table follows
+the code.
 
 ### Filter updates and resampling
 
@@ -395,6 +409,10 @@ Standard deviations of the odometry error model.
 A scan that triggers none of the three conditions only propagates the
 particles with the motion model: no scan matching, no weight update, no map
 update.
+
+The translation and rotation are accumulated from the odometry of the centred
+laser frame, not of `base_frame`: a laser mounted away from the rotation axis
+also accumulates translation while the base turns in place.
 
 ### Map
 
@@ -448,8 +466,8 @@ TF:
 
 | Direction | Transform | Notes |
 | --- | --- | --- |
-| required | `<laser frame> -> base_frame` | From `header.frame_id` of the scans; usually static. |
-| required | `base_frame -> odom_frame` | Odometry, available at the scan stamps. |
+| required | `base_frame -> <laser frame>` | Laser frame from `header.frame_id` of the scans; usually static. |
+| required | `odom_frame -> base_frame` | Odometry, available at the scan stamps. |
 | provided | `map_frame -> odom_frame` | Every `transform_publish_period` s, stamped `now + tf_delay`; identity until the first scan is processed. |
 
 ### slam_gmapping_offline
@@ -496,8 +514,10 @@ timestamp x y z qx qy qz qw
 
 - `timestamp`: `header.stamp` of the scan [s];
 - pose of `base_frame` in `map_frame`. GMapping estimates the pose of the
-  centred laser frame; the static `laser -> base_frame` transform (looked up
-  once, at the first logged scan) is applied before logging;
+  centred laser frame. For `_pose` and `_traj`, the static transform between
+  the centred laser frame and `base_frame` (looked up once, at the first logged
+  scan) is applied before logging; `_tf` composes `map_frame -> odom_frame`
+  with `odom_frame -> base_frame`, looked up at each scan stamp;
 - planar: `z = 0`, roll and pitch are zero (only the yaw is kept).
 
 Example evaluation with [evo](https://github.com/MichaelGrupp/evo):
@@ -524,6 +544,13 @@ roslaunch gmapping slam_gmapping_offline.launch bags:=/data/run.bag \
 # (gdb) backtrace
 # (gdb) thread apply all bt
 ```
+
+## TODO
+
+- Install `launch/`, `config/` and `rviz/` (CMake `install(DIRECTORY ...)`),
+  so the launch files also work from an install space.
+- Remove the leftover banner `Press SPACE to pause/resume processing, 'q' to
+  quit...` of the disabled interactive mode (or re-enable the mode).
 
 ## License and credits
 
